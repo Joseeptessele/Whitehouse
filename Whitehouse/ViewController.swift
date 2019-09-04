@@ -16,9 +16,7 @@ class ViewController: UITableViewController, UISearchResultsUpdating {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let urlString: String
         
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Credits", style: .plain, target: self, action: #selector(creditsMessage))
         
         search = UISearchController(searchResultsController: nil)
         search.searchResultsUpdater = self
@@ -26,7 +24,15 @@ class ViewController: UITableViewController, UISearchResultsUpdating {
         search.searchBar.placeholder = "Type something here to search"
         search.searchBar.sizeToFit()
         tableView.tableHeaderView = search.searchBar
-
+        
+        performSelector(inBackground: #selector(fetchJSON), with: nil)
+    }
+    
+    @objc func fetchJSON(){
+        let urlString: String
+        
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Credits", style: .plain, target: self, action: #selector(creditsMessage))
+        
         
         if navigationController?.tabBarItem.tag == 0 {
             urlString = "https://www.hackingwithswift.com/samples/petitions-1.json"
@@ -34,14 +40,16 @@ class ViewController: UITableViewController, UISearchResultsUpdating {
             urlString = "https://www.hackingwithswift.com/samples/petitions-2.json"
         }
         
+        // global -> run in the background
         if let url = URL(string: urlString){
             if let data = try? Data(contentsOf: url){
                 parse(json: data)
                 return
             }
         }
-        
-        showError()
+        // as showError method has UI work and is being called on a background thread
+        // it must come back to the main thread
+        performSelector(onMainThread: #selector(showError), with: nil, waitUntilDone: false)
     }
     
     func updateSearchResults(for searchController: UISearchController) {
@@ -73,11 +81,11 @@ class ViewController: UITableViewController, UISearchResultsUpdating {
         present(ac, animated: true)
     }
     
-    func showError(){
+    @objc func showError(){
         let ac = UIAlertController(title: "Loadin Error", message: "There was a problem loading the feed; please check your connection and try again", preferredStyle: .alert)
-        
+    
         ac.addAction(UIAlertAction(title: "Ok", style: .default, handler: nil))
-        present(ac, animated: true)
+       present(ac, animated: true)
     }
     
     func parse(json: Data){
@@ -85,7 +93,12 @@ class ViewController: UITableViewController, UISearchResultsUpdating {
         
         if let jsonPetitions = try? decoder.decode(Petitions.self, from: json){
             petitions = jsonPetitions.results
-            tableView.reloadData()
+            // as this method is being called on a background thread and
+            // is bad do UI work on this kind of thread, the reload data must
+            // go to the main thread
+            tableView.performSelector(onMainThread: #selector(UITableView.reloadData), with: nil, waitUntilDone: false)
+        } else {
+            performSelector(onMainThread: #selector(showError), with: nil, waitUntilDone: false)
         }
     }
 
